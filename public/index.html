@@ -844,11 +844,11 @@ function computeLambda(team, opponent, statsTeam, statsOpp) {
   // Facteur défense adverse normalisé
   let base = attack * (defenseOpp / AVG_GOALS);
 
-  // Coefficient de niveau relatif FIFA (racine carrée du ratio).
-  // Évite les résultats aberrants quand la forme récente vient de matchs
-  // contre des adversaires de niveau très différent (ex. Haïti en amicaux
-  // caribéens vs Brésil en qualifs CONMEBOL).
-  const fifaRatio = Math.sqrt(team.fifa / opponent.fifa);
+  // Coefficient de niveau relatif FIFA (puissance 1.0 = ratio direct).
+  // Recalibre la forme récente selon l'écart de niveau réel entre les équipes,
+  // évitant qu'une petite nation soit favorisée grâce à une forme gonflée
+  // contre des adversaires sans rapport avec le niveau du match.
+  const fifaRatio = team.fifa / opponent.fifa;
   base *= fifaRatio;
 
   // Malus absence (multiplicatif)
