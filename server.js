@@ -1,22 +1,28 @@
 /**
  * Serveur du Prédicteur Coupe du Monde 2026
  * ===========================================
- * Ce petit serveur fait deux choses :
- *  1. Il appelle l'API-Football à ta place (ta clé reste secrète côté serveur,
- *     jamais visible dans le navigateur de l'utilisateur).
- *  2. Il garde les résultats en mémoire pendant 10 minutes (cache) pour éviter
- *     de dépasser ton quota gratuit de 100 requêtes/jour si plusieurs personnes
+ * Ce serveur fait trois choses :
+ *  1. Il sert l'app elle-même (HTML, manifeste PWA, icônes, service worker)
+ *     depuis le dossier "public" — c'est ce qui permet d'installer l'app
+ *     sur un téléphone comme une vraie application.
+ *  2. Il appelle l'API-Football à ta place (ta clé reste secrète côté
+ *     serveur, jamais visible dans le navigateur de l'utilisateur).
+ *  3. Il garde les résultats en mémoire pendant 10 minutes (cache) pour
+ *     éviter de dépasser ton quota d'appels API si plusieurs personnes
  *     ouvrent l'app en même temps.
- *
- * Une fois déployé (voir GUIDE-DEPLOIEMENT.md), ce serveur expose une seule
- * adresse : /api/fixtures qui renvoie les prochains matchs et leurs stats.
  */
 
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 
 const app = express();
-app.use(cors()); // autorise l'app web (autre domaine) à appeler ce serveur
+app.use(cors()); // autorise les appels venant d'autres domaines (utile en développement)
+
+// Sert tous les fichiers du dossier "public" (HTML, manifest.json, icônes,
+// sw.js) à la racine du site. C'est ce qui permet à l'app d'être hébergée et
+// donc installable depuis cette même adresse Render.
+app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_FOOTBALL_KEY; // définie sur Render, jamais en dur ici
