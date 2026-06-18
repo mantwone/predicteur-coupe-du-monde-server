@@ -228,6 +228,49 @@ app.get("/api/odds/:fixtureId", async (req, res) => {
   }
 });
 
+// ---- Cache pour les compositions par fixture ----
+const lineupsCache = new Map();
+
+/**
+ * Récupère les compositions officielles (titulaires + remplaçants + formation
+ * + coach) pour un match donné. Disponibles 20 à 40 min avant le coup
+ * d'envoi. Renvoie un tableau vide si pas encore publiées.
+ */
+app.get("/api/lineups/:fixtureId", async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const now = Date.now();
+    const cached = lineupsCache.get(fixtureId);
+    if (cached && now - cached.fetchedAt < CACHE_DURATION_MS) {
+      return res.json({ cached: true, lineups: cached.data });
+    }
+
+    const raw = await apiFootballGet("/fixtures/lineups", { fixture: fixtureId });
+    const lineups = (raw.response || []).map((team) => ({
+      teamId: team.team.id,
+      teamName: team.team.name,
+      formation: team.formation || null,
+      coach: team.coach?.name || null,
+      startXI: (team.startXI || []).map((p) => ({
+        number: p.player.number,
+        name: p.player.name,
+        pos: p.player.pos,
+      })),
+      substitutes: (team.substitutes || []).map((p) => ({
+        number: p.player.number,
+        name: p.player.name,
+        pos: p.player.pos,
+      })),
+    }));
+
+    lineupsCache.set(fixtureId, { data: lineups, fetchedAt: now });
+    res.json({ cached: false, lineups });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de récupérer les compositions pour ce match." });
+  }
+});
+
 // ---- Cache pour les statistiques détaillées par fixture ----
 const statsCache = new Map();
 
