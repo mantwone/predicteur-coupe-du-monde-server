@@ -91,4 +91,17 @@ app.get("/api/fixtures", async (req, res) => {
     }
 
     const fixtures = await fetchUpcomingFixtures();
-    cache = {
+    cache = { data: fixtures, fetchedAt: now };
+    res.json({ cached: false, fixtures });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de récupérer les matchs pour le moment." });
+  }
+});
+
+// Endpoint de santé, utile pour les services qui "réveillent" le serveur
+app.get("/healthz", (req, res) => res.send("ok"));
+
+app.listen(PORT, () => {
+  console.log(`Serveur du prédicteur démarré sur le port ${PORT}`);
+});
