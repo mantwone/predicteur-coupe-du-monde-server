@@ -58,7 +58,7 @@ async function fetchUpcomingFixtures() {
   const fixturesResp = await apiFootballGet("/fixtures", {
     league: LEAGUE_ID,
     season: SEASON,
-    next: 40,
+    next: 100,
     status: "NS",
   });
 
