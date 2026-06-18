@@ -113,32 +113,40 @@
   header { padding: 48px 0 28px; }
   .eyebrow {
     font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.12em;
+    font-size: 11px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(255,106,26,0.25);
+    padding: 5px 12px;
+    border-radius: 20px;
   }
   .eyebrow::before {
     content: '';
-    width: 7px; height: 7px;
+    width: 6px; height: 6px;
     border-radius: 50%;
     background: var(--accent);
-    box-shadow: 0 0 0 4px var(--accent-dim);
+    box-shadow: 0 0 0 3px var(--accent-dim);
     animation: pulseGlow 2.2s ease-in-out infinite;
   }
   h1 {
     font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 42px;
-    letter-spacing: -0.01em;
+    font-weight: 700;
+    font-size: 46px;
+    letter-spacing: -0.02em;
     text-transform: uppercase;
-    line-height: 1.05;
+    line-height: 1.0;
+    background: linear-gradient(135deg, #FFFFFF 0%, #C8C8C0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
-  .subhead { color: var(--text-secondary); font-size: 15px; margin-top: 10px; max-width: 540px; }
+  .subhead { color: var(--text-secondary); font-size: 14px; margin-top: 12px; max-width: 520px; line-height: 1.6; }
 
   .header-stats {
     display: flex;
@@ -248,15 +256,17 @@
   .scoreboard {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
     border-radius: 10px;
     overflow: hidden;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.3), 0 0 0 0 transparent;
   }
   .scoreboard-top {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     padding: 28px 24px;
-    background: linear-gradient(180deg, var(--surface-raised), var(--surface));
+    background: linear-gradient(180deg, rgba(43,48,58,0.9) 0%, var(--surface) 100%);
     border-bottom: 1px solid var(--border);
   }
   .team-block.right { text-align: right; }
@@ -271,12 +281,12 @@
 
   .score-display {
     font-family: var(--font-mono);
-    font-size: 44px;
+    font-size: 52px;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     color: var(--text-primary);
     padding: 0 20px;
-    text-shadow: 0 0 24px rgba(255,106,26,0.25);
+    text-shadow: 0 0 40px rgba(255,106,26,0.35), 0 0 80px rgba(255,106,26,0.1);
   }
   .score-label {
     text-align: center;
@@ -299,19 +309,20 @@
   .prob-labels span:last-child { flex: 1; text-align: right; }
   .prob-labels span.mid { width: 60px; text-align: center; }
 
-  .prob-bar { display: flex; height: 34px; border-radius: 7px; overflow: hidden; }
+  .prob-bar { display: flex; height: 40px; border-radius: 8px; overflow: hidden; box-shadow: inset 0 2px 6px rgba(0,0,0,0.25); }
   .prob-seg {
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: var(--font-mono);
     font-size: 13px;
-    font-weight: 600;
-    transition: width 0.3s ease;
+    font-weight: 700;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: 0.02em;
   }
-  .seg-a { background: var(--win); color: #06301B; }
-  .seg-draw { background: var(--draw); color: #0B0D0F; }
-  .seg-b { background: var(--accent); color: #2E1300; }
+  .seg-a { background: linear-gradient(180deg, #35C882 0%, var(--win) 100%); color: #04291A; }
+  .seg-draw { background: linear-gradient(180deg, #6A7078 0%, var(--draw) 100%); color: #0A0C0E; }
+  .seg-b { background: linear-gradient(180deg, #FF8040 0%, var(--accent) 100%); color: #2A1000; }
 
   .score-pick {
     margin-top: 8px;
@@ -322,10 +333,21 @@
     border: 1px solid var(--border);
     border-radius: 7px;
     padding: 10px 18px;
+    transition: background 0.2s;
+  }
+  .score-pick:first-child {
+    background: linear-gradient(135deg, rgba(255,106,26,0.08) 0%, rgba(255,106,26,0.03) 100%);
+    border-color: rgba(255,106,26,0.3);
   }
   .score-pick-label { font-size: 13px; color: var(--text-secondary); }
-  .score-pick-value { font-family: var(--font-mono); font-size: 18px; font-weight: 600; }
+  .score-pick-value {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .score-pick:first-child .score-pick-value { font-size: 22px; color: var(--text-primary); }
   .score-pick-pct { font-size: 12px; color: var(--text-tertiary); margin-left: 8px; }
+  .score-pick:first-child .score-pick-pct { color: var(--accent); font-weight: 600; }
 
   .disclaimer {
     margin-top: 18px;
@@ -339,8 +361,10 @@
     margin-top: 20px;
     background: var(--surface);
     border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
     border-radius: 10px;
     padding: 18px 22px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.2);
   }
   .odds-card-head {
     display: flex;
@@ -621,7 +645,7 @@
     <div class="header-stats">
       <div><div class="header-stat-num" id="stat-teams">—</div><div class="header-stat-label">Sélections suivies</div></div>
       <div><div class="header-stat-num" id="stat-groups">12</div><div class="header-stat-label">Groupes</div></div>
-      <div><div class="header-stat-num" id="stat-fixtures">7</div><div class="header-stat-label">Matchs avec cotes</div></div>
+      <div><div class="header-stat-num">104</div><div class="header-stat-label">Matchs au total</div></div>
     </div>
 
     <nav class="tabs">
@@ -684,7 +708,7 @@
     <div id="avg-stats-zone"></div>
     <div id="lineups-zone"></div>
 
-    <p class="disclaimer">Données rassemblées manuellement (classement FIFA, absences, cotes Unibet) à la date du 17 juin 2026 — pas un flux temps réel. Phase de groupes : pas d'avantage domicile/extérieur appliqué, sauf pour les trois pays hôtes. La comparaison cote vs modèle est fournie à titre informatif, ce n'est pas un conseil de pari.</p>
+    <p class="disclaimer">Classement FIFA et matchs à venir chargés en direct via API-Football. Forme récente mise à jour manuellement. Modèle statistique de Poisson — pas un flux temps réel complet. Phase de groupes : pas d'avantage domicile/extérieur appliqué, sauf pour les trois pays hôtes. La comparaison cote vs modèle est fournie à titre informatif, ce n'est pas un conseil de pari.</p>
 
   </section>
 
