@@ -683,7 +683,7 @@
         <div class="score-display" id="score-display">0.0 – 0.0</div>
         <div class="team-block right" id="team-b-block"></div>
       </div>
-      <div class="score-label">Buts attendus — Poisson + Dixon-Coles · FIFA · Forme · xG</div>
+      <div class="score-label" id="score-label">Buts attendus — Poisson + Dixon-Coles · FIFA · Forme · xG</div>
 
       <div class="prob-section">
         <div class="prob-labels">
@@ -795,66 +795,53 @@ const TEAMS = {
 const FIXTURES = [];
 
 const AVG_GOALS = 1.35;
-const RHO = -0.13; // Coefficient de correction Dixon-Coles
-// Ratio moyen tirs cadrés → buts en football international (source : analyse
-// de 5000+ matchs UEFA/FIFA : ~3.5 tirs cadrés produisent 1 but en moyenne).
+const FIFA_REF = 1700;
+const RHO = -0.13;
 const SHOTS_ON_TARGET_PER_GOAL = 3.5;
 
 /**
  * Calcule le lambda (buts attendus) d'une équipe contre un adversaire.
  *
- * Sources par ordre de priorité :
- * 1. Tirs cadrés / match via API (proxy xG, ~5 derniers matchs toutes compétitions)
- * 2. xG diff du J1 Mondial (signal qualitatif quand tirs API indisponibles)
- * 3. Buts marqués / match en forme récente (fallback si pas de stats API)
+ * Modèle attaque/défense séparés, chacun pondéré par le FIFA :
  *
- * La défense adverse est calculée de la même façon (tirs cadrés concédés ou
- * buts concédés selon disponibilité).
+ *   att_norm = (buts_marqués/AVG ou tirs_cadrés/3.5) × (fifa_équipe / FIFA_REF)
+ *   def_norm = (buts_concédés_adv/AVG) × (FIFA_REF / fifa_adversaire)
+ *   lambda   = att_norm × def_norm × AVG_GOALS
  *
- * @param {Object} team       - données de l'équipe (recentForm, xgDiff, absence)
- * @param {Object} opponent   - données de l'adversaire
- * @param {Object|null} statsTeam    - stats API de l'équipe (shotsOnGoal moyen)
- * @param {Object|null} statsOpp     - stats API de l'adversaire
+ * Le FIFA intervient deux fois : bonus sur l'attaque de l'équipe forte,
+ * et malus sur la défense de l'équipe faible. Ça évite qu'Haïti soit
+ * créditée d'une bonne défense parce qu'elle a peu concédé contre des
+ * équipes caribéennes, face au Brésil.
  */
 function computeLambda(team, opponent, statsTeam, statsOpp) {
   const rf = team.recentForm;
   const rfOpp = opponent.recentForm;
 
-  // ---- Attaque de l'équipe ----
-  let attack;
+  // Attaque brute (tirs cadrés API > xG diff Mondial > buts récents)
+  let rawAttack;
   if (statsTeam && statsTeam.shotsOnGoal !== null) {
-    attack = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
+    rawAttack = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
   } else if (team.xgDiff !== null && team.xgDiff !== undefined) {
-    const formGf = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
-    attack = formGf * (1.0 + (team.xgDiff / 10) * 0.25);
+    const gf = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
+    rawAttack = gf * (1.0 + (team.xgDiff / 10) * 0.25);
   } else {
-    attack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
+    rawAttack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
   }
+  rawAttack *= 1.0 + (team.absence || 0);
 
-  // ---- Défense adverse ----
-  let defenseOpp;
+  // Défense brute de l'adversaire
+  let rawDefOpp;
   if (statsOpp && statsOpp.shotsOnGoal !== null) {
-    defenseOpp = statsOpp.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
+    rawDefOpp = statsOpp.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
   } else {
-    defenseOpp = rfOpp && rfOpp.matches > 0
-      ? rfOpp.ga / rfOpp.matches
-      : AVG_GOALS;
+    rawDefOpp = rfOpp && rfOpp.matches > 0 ? rfOpp.ga / rfOpp.matches : AVG_GOALS;
   }
 
-  // Facteur défense adverse normalisé
-  let base = attack * (defenseOpp / AVG_GOALS);
+  // Normalisation FIFA séparée pour l'attaque et la défense adverse
+  const attNorm = (rawAttack / AVG_GOALS) * (team.fifa / FIFA_REF);
+  const defNorm = (rawDefOpp / AVG_GOALS) * (FIFA_REF / opponent.fifa);
 
-  // Coefficient de niveau relatif FIFA (puissance 1.0 = ratio direct).
-  // Recalibre la forme récente selon l'écart de niveau réel entre les équipes,
-  // évitant qu'une petite nation soit favorisée grâce à une forme gonflée
-  // contre des adversaires sans rapport avec le niveau du match.
-  const fifaRatio = team.fifa / opponent.fifa;
-  base *= fifaRatio;
-
-  // Malus absence (multiplicatif)
-  base *= 1.0 + (team.absence || 0);
-
-  return Math.max(base, 0.3);
+  return Math.max(attNorm * defNorm * AVG_GOALS, 0.3);
 }
 
 /**
@@ -1163,7 +1150,10 @@ function render() {
   const lambdaA = computeLambda(a, b, activeStatsHome, activeStatsAway);
   const lambdaB = computeLambda(b, a, activeStatsAway, activeStatsHome);
 
-  document.getElementById('score-display').textContent = lambdaA.toFixed(1) + ' – ' + lambdaB.toFixed(1);
+  const scoreA = Math.round(lambdaA);
+  const scoreB = Math.round(lambdaB);
+  document.getElementById('score-display').textContent = scoreA + ' – ' + scoreB;
+  document.getElementById('score-label').textContent = `Score attendu · λ ${lambdaA.toFixed(1)}–${lambdaB.toFixed(1)} · Poisson + Dixon-Coles`;
 
   const maxGoals = 7;
   let aWin = 0, draw = 0, bWin = 0;
