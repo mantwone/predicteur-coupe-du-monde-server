@@ -795,46 +795,42 @@ const TEAMS = {
 const FIXTURES = [];
 
 const AVG_GOALS = 1.35;
-const FIFA_REF = 1700;
-const RHO = -0.13; // Coefficient de correction Dixon-Coles (réduit le biais sur 0-0 et 1-1)
+const RHO = -0.13; // Coefficient de correction Dixon-Coles
 
 /**
  * Calcule le lambda (buts attendus) d'une équipe contre un adversaire.
  *
- * Modèle combiné :
- *  - Classement FIFA (20-30%) : force de base, utile pour équipes sans données
- *  - Forme récente (50-70%)  : moyenne buts marqués/concédés, source principale
- *  - xG diff Mondial (30%)   : signal de qualité de jeu quand disponible
- *  - Défense adverse         : buts concédés en forme récente de l'adversaire
- *  - Absences                : malus si joueur clé manquant
+ * Modèle basé sur la forme récente uniquement (sans classement FIFA) :
+ *  - Attaque  : moyenne de buts marqués sur les N derniers matchs
+ *  - Défense  : moyenne de buts concédés de l'adversaire (N derniers matchs)
+ *  - xG diff  : boost multiplicatif si disponible (qualité de jeu au Mondial)
+ *  - Absences : malus multiplicatif si joueur clé absent
+ *
+ * Le FIFA est volontairement exclu pour éviter que des écarts de classement
+ * artificiellement serrés écrasent des données de forme concrètes.
  */
 function computeLambda(team, opponent) {
   const rf = team.recentForm;
   const rfOpp = opponent.recentForm;
 
-  // Attaque normalisée par AVG_GOALS → ~1.0 pour une équipe moyenne
-  const formGf = rf && rf.matches > 0 ? (rf.gf / rf.matches) / AVG_GOALS : 1.0;
-  const fifaAtt = team.fifa / FIFA_REF;
+  // Buts marqués par match (attaque de l'équipe)
+  const formGf = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
 
-  let attack;
+  // Buts concédés par match de l'adversaire (faiblesse défensive)
+  const formGaOpp = rfOpp && rfOpp.matches > 0 ? rfOpp.ga / rfOpp.matches : AVG_GOALS;
+
+  // Base : attaque × faiblesse défensive adverse, normalisée par la moyenne
+  let base = formGf * (formGaOpp / AVG_GOALS);
+
+  // Boost xG si disponible (signal de qualité de jeu au Mondial)
   if (team.xgDiff !== null && team.xgDiff !== undefined) {
-    const xgNorm = 1.0 + (team.xgDiff / 10) * 0.30;
-    attack = fifaAtt * 0.20 + formGf * 0.50 + xgNorm * 0.30;
-  } else {
-    // Sans xG, on redistribue son poids sur FIFA et forme
-    attack = fifaAtt * 0.30 + formGf * 0.70;
+    base *= 1.0 + (team.xgDiff / 10) * 0.25;
   }
 
-  // Malus absence
-  attack += team.absence || 0;
+  // Malus absence (multiplicatif, ex: -0.10 → ×0.90)
+  base *= 1.0 + (team.absence || 0);
 
-  // Défense adverse : buts concédés élevés = défense faible = lambda plus haut
-  const formGaOpp = rfOpp && rfOpp.matches > 0 ? (rfOpp.ga / rfOpp.matches) / AVG_GOALS : 1.0;
-  const fifaDefOpp = FIFA_REF / opponent.fifa; // inversé : FIFA faible → défense faible
-
-  const defenseOpp = fifaDefOpp * 0.30 + formGaOpp * 0.70;
-
-  return Math.max(attack * defenseOpp * AVG_GOALS, 0.3);
+  return Math.max(base, 0.3);
 }
 
 /**
