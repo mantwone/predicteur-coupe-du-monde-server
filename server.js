@@ -55,11 +55,27 @@ async function apiFootballGet(path, params) {
  * même si l'API a un léger délai à passer un match en "en cours".
  */
 async function fetchUpcomingFixtures() {
-  // Un seul appel avec next:100 — on laisse l'API renvoyer les prochains
-  // matchs sans filtrer par statut (le filtre status+next causait des conflits).
+  // L'API-Football n'accepte pas "next" combiné avec d'autres filtres.
+  // On utilise "from" et "to" pour couvrir les 30 prochains jours de matchs.
+  const today = new Date();
+  const in30days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const fmt = (d) => d.toISOString().slice(0, 10); // YYYY-MM-DD
+
   const [upcomingResp, liveResp] = await Promise.all([
-    apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, next: 100 }),
-    apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, status: "1H-HT-2H-ET" }),
+    apiFootballGet("/fixtures", {
+      league: LEAGUE_ID,
+      season: SEASON,
+      from: fmt(today),
+      to: fmt(in30days),
+      status: "NS",
+    }),
+    apiFootballGet("/fixtures", {
+      league: LEAGUE_ID,
+      season: SEASON,
+      from: fmt(today),
+      to: fmt(today),
+      status: "1H-HT-2H-ET",
+    }),
   ]);
 
   const upcoming = upcomingResp.response || [];
@@ -319,9 +335,13 @@ app.get("/api/debug", async (req, res) => {
 
 app.get("/api/debug2", async (req, res) => {
   try {
+    const today = new Date();
+    const in30days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+
     const [upcomingResp, liveResp] = await Promise.all([
-      apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, next: 100 }),
-      apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, status: "1H-HT-2H-ET" }),
+      apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, from: fmt(today), to: fmt(in30days), status: "NS" }),
+      apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, from: fmt(today), to: fmt(today), status: "1H-HT-2H-ET" }),
     ]);
     res.json({
       upcoming_results: upcomingResp.results,
