@@ -43,32 +43,34 @@ async function apiFootballGet(path, params) {
 }
 
 /**
- * Récupère les prochains matchs de la Coupe du Monde 2026 (les 40 suivants,
- * soit environ 3 à 4 journées de tournoi puisque plusieurs matchs se jouent
- * chaque jour), et pour chacun les infos essentielles des deux équipes.
+ * Récupère les prochains matchs de la Coupe du Monde 2026 qui n'ont pas
+ * encore commencé (statut NS = Not Started). On filtre par statut plutôt que
+ * par seul "next" pour être certain qu'aucun match déjà débuté ne s'affiche,
+ * même si l'API a un léger délai à passer un match en "en cours".
  */
 async function fetchUpcomingFixtures() {
   const fixturesResp = await apiFootballGet("/fixtures", {
     league: LEAGUE_ID,
     season: SEASON,
     next: 40,
+    status: "NS",
   });
 
   const fixtures = fixturesResp.response || [];
+  const now = Date.now();
 
-  const enriched = await Promise.all(
-    fixtures.map(async (f) => {
+  const enriched = fixtures
+    .filter((f) => new Date(f.fixture.date).getTime() > now) // garde-fou supplémentaire
+    .map((f) => {
       const homeId = f.teams.home.id;
       const awayId = f.teams.away.id;
 
-      // Stats simples : on récupère le classement FIFA via une recherche du
-      // nom d'équipe n'est pas disponible nativement dans API-Football, donc
-      // ici on remonte uniquement les infos déjà fournies par le fixture lui-même.
       return {
         fixtureId: f.fixture.id,
         date: f.fixture.date,
         venue: f.fixture.venue?.name || null,
         round: f.league.round,
+        status: f.fixture.status?.short || null,
         home: {
           id: homeId,
           name: f.teams.home.name,
@@ -80,8 +82,7 @@ async function fetchUpcomingFixtures() {
           logo: f.teams.away.logo,
         },
       };
-    })
-  );
+    });
 
   return enriched;
 }
@@ -134,6 +135,111 @@ app.get("/api/predictions/:fixtureId", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Impossible de récupérer le pronostic pour ce match." });
+  }
+});
+
+// ---- Cache pour les statistiques détaillées par fixture ----
+const statsCache = new Map();
+
+/**
+ * Récupère les statistiques détaillées (tirs, possession, corners, fautes,
+ * cartons) pour un match précis, une équipe par entrée. Ne fonctionne que
+ * pour les matchs déjà en cours ou terminés — un match pas encore commencé
+ * renvoie une liste vide, ce qui est normal et pas une erreur.
+ */
+app.get("/api/statistics/:fixtureId", async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const now = Date.now();
+    const cached = statsCache.get(fixtureId);
+    if (cached && now - cached.fetchedAt < CACHE_DURATION_MS) {
+      return res.json({ cached: true, statistics: cached.data });
+    }
+
+    const raw = await apiFootballGet("/fixtures/statistics", { fixture: fixtureId });
+    const statistics = raw.response || [];
+    statsCache.set(fixtureId, { data: statistics, fetchedAt: now });
+    res.json({ cached: false, statistics });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de récupérer les statistiques pour ce match." });
+  }
+});
+
+// ---- Cache pour la moyenne de stats récentes par équipe (clé = teamId) ----
+const avgStatsCache = new Map();
+
+/**
+ * Calcule la moyenne de possession, tirs et corners sur les 5 derniers
+ * matchs joués par une équipe (toutes compétitions). Nécessite plusieurs
+ * appels en cascade : 1 pour la liste des matchs + jusqu'à 5 pour leurs
+ * statistiques. Les matchs sans statistiques disponibles sont ignorés plutôt
+ * que de fausser la moyenne avec des zéros.
+ */
+async function fetchTeamAverageStats(teamId) {
+  const recentResp = await apiFootballGet("/fixtures", { team: teamId, last: 5 });
+  const recentFixtures = recentResp.response || [];
+
+  const perMatchStats = await Promise.all(
+    recentFixtures.map(async (f) => {
+      try {
+        const statsResp = await apiFootballGet("/fixtures/statistics", { fixture: f.fixture.id });
+        const teamEntry = (statsResp.response || []).find((s) => s.team.id === Number(teamId));
+        if (!teamEntry) return null;
+
+        const getVal = (type) => {
+          const found = teamEntry.statistics.find((s) => s.type === type);
+          if (!found || found.value === null) return null;
+          if (typeof found.value === "string" && found.value.includes("%")) {
+            return parseFloat(found.value);
+          }
+          return Number(found.value);
+        };
+
+        return {
+          possession: getVal("Ball Possession"),
+          totalShots: getVal("Total Shots"),
+          shotsOnGoal: getVal("Shots on Goal"),
+          corners: getVal("Corner Kicks"),
+        };
+      } catch {
+        return null; // un match sans stats ne doit pas faire échouer tout le calcul
+      }
+    })
+  );
+
+  const valid = perMatchStats.filter((s) => s !== null);
+  const average = (key) => {
+    const vals = valid.map((s) => s[key]).filter((v) => v !== null && v !== undefined);
+    if (vals.length === 0) return null;
+    return vals.reduce((sum, v) => sum + v, 0) / vals.length;
+  };
+
+  return {
+    matchesUsed: valid.length,
+    possession: average("possession"),
+    totalShots: average("totalShots"),
+    shotsOnGoal: average("shotsOnGoal"),
+    corners: average("corners"),
+  };
+}
+
+app.get("/api/team-avg-stats/:teamId", async (req, res) => {
+  const { teamId } = req.params;
+  try {
+    const now = Date.now();
+    const cached = avgStatsCache.get(teamId);
+    // Cache plus long (1h) car ça représente beaucoup d'appels API d'un coup.
+    if (cached && now - cached.fetchedAt < 60 * 60 * 1000) {
+      return res.json({ cached: true, averageStats: cached.data });
+    }
+
+    const averageStats = await fetchTeamAverageStats(teamId);
+    avgStatsCache.set(teamId, { data: averageStats, fetchedAt: now });
+    res.json({ cached: false, averageStats });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de calculer la moyenne pour cette équipe." });
   }
 });
 
