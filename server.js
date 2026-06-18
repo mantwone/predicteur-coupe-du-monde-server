@@ -43,14 +43,15 @@ async function apiFootballGet(path, params) {
 }
 
 /**
- * Récupère les prochains matchs de la Coupe du Monde 2026 (les 10 suivants),
- * et pour chacun les stats essentielles des deux équipes.
+ * Récupère les prochains matchs de la Coupe du Monde 2026 (les 40 suivants,
+ * soit environ 3 à 4 journées de tournoi puisque plusieurs matchs se jouent
+ * chaque jour), et pour chacun les infos essentielles des deux équipes.
  */
 async function fetchUpcomingFixtures() {
   const fixturesResp = await apiFootballGet("/fixtures", {
     league: LEAGUE_ID,
     season: SEASON,
-    next: 10,
+    next: 40,
   });
 
   const fixtures = fixturesResp.response || [];
@@ -60,9 +61,6 @@ async function fetchUpcomingFixtures() {
       const homeId = f.teams.home.id;
       const awayId = f.teams.away.id;
 
-      // Stats simples : on récupère le classement FIFA via une recherche du
-      // nom d'équipe n'est pas disponible nativement dans API-Football, donc
-      // ici on remonte uniquement les infos déjà fournies par le fixture lui-même.
       return {
         fixtureId: f.fixture.id,
         date: f.fixture.date,
@@ -93,17 +91,4 @@ app.get("/api/fixtures", async (req, res) => {
     }
 
     const fixtures = await fetchUpcomingFixtures();
-    cache = { data: fixtures, fetchedAt: now };
-    res.json({ cached: false, fixtures });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Impossible de récupérer les matchs pour le moment." });
-  }
-});
-
-// Endpoint de santé, utile pour les services qui "réveillent" le serveur
-app.get("/healthz", (req, res) => res.send("ok"));
-
-app.listen(PORT, () => {
-  console.log(`Serveur du prédicteur démarré sur le port ${PORT}`);
-});
+    cache = {
