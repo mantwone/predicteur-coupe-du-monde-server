@@ -55,11 +55,10 @@ async function apiFootballGet(path, params) {
  * même si l'API a un léger délai à passer un match en "en cours".
  */
 async function fetchUpcomingFixtures() {
-  // Deux appels séparés car l'API ne supporte pas "next" avec des statuts
-  // multiples : un pour les matchs à venir (NS = Not Started), un pour les
-  // matchs en cours (1H, HT, 2H, ET). On fusionne les résultats.
+  // Un seul appel avec next:100 — on laisse l'API renvoyer les prochains
+  // matchs sans filtrer par statut (le filtre status+next causait des conflits).
   const [upcomingResp, liveResp] = await Promise.all([
-    apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, next: 100, status: "NS" }),
+    apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, next: 100 }),
     apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, status: "1H-HT-2H-ET" }),
   ]);
 
