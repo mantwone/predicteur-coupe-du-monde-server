@@ -434,6 +434,49 @@
   }
   .stat-bar-a { background: var(--accent); height: 100%; }
   .stat-bar-b { background: var(--win); height: 100%; }
+  .lineups-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 6px;
+  }
+  .lineup-team-name {
+    font-family: var(--font-display);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .lineup-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+  }
+  .lineup-player {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    gap: 8px;
+  }
+  .lineup-player .pnum {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    min-width: 18px;
+  }
+  .lineup-subs-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin: 10px 0 4px;
+  }
+
   .odds-legend {
     display: flex;
     justify-content: space-between;
@@ -639,6 +682,7 @@
     <div id="api-prediction-zone"></div>
     <div id="match-stats-zone"></div>
     <div id="avg-stats-zone"></div>
+    <div id="lineups-zone"></div>
 
     <p class="disclaimer">Données rassemblées manuellement (classement FIFA, absences, cotes Unibet) à la date du 17 juin 2026 — pas un flux temps réel. Phase de groupes : pas d'avantage domicile/extérieur appliqué, sauf pour les trois pays hôtes. La comparaison cote vs modèle est fournie à titre informatif, ce n'est pas un conseil de pari.</p>
 
@@ -1038,6 +1082,7 @@ function render() {
   renderApiPrediction();
   renderMatchStats(a, b);
   renderAvgStats(a, b);
+  renderLineups(a, b);
 }
 
 function edgeClass(diff) {
@@ -1069,6 +1114,97 @@ function fetchWithTimeout(url, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+function renderLineups(a, b) {
+  const zone = document.getElementById('lineups-zone');
+
+  if (!SERVER_URL || !activeFixtureId) {
+    zone.innerHTML = '';
+    return;
+  }
+
+  zone.innerHTML = `
+    <div class="odds-card">
+      <div class="odds-card-head"><span class="odds-card-title">Compositions officielles</span></div>
+      <div class="odds-card-empty">Chargement...</div>
+    </div>
+  `;
+
+  fetch(SERVER_URL + '/api/lineups/' + activeFixtureId)
+    .then((r) => r.json())
+    .then((data) => {
+      const lineups = data.lineups || [];
+
+      if (lineups.length === 0) {
+        zone.innerHTML = `
+          <div class="odds-card">
+            <div class="odds-card-head"><span class="odds-card-title">Compositions officielles</span></div>
+            <div class="odds-card-empty">Pas encore disponibles (publiées 20 à 40 min avant le coup d'envoi).</div>
+          </div>
+        `;
+        return;
+      }
+
+      // L'API renvoie une entrée par équipe ; on identifie home/away par
+      // leur nom plutôt que par leur position dans le tableau.
+      const findTeam = (teamObj) => {
+        const n = teamObj?.teamName?.toLowerCase() || '';
+        return lineups.find((l) =>
+          l.teamName?.toLowerCase() === n ||
+          n.includes(l.teamName?.toLowerCase() || '###')
+        ) || lineups[0];
+      };
+
+      const renderTeam = (lineup) => {
+        if (!lineup) return '<div class="odds-card-empty">Composition non disponible.</div>';
+        const starters = lineup.startXI || [];
+        const subs = lineup.substitutes || [];
+
+        return `
+          <div>
+            <div class="lineup-team-name">${lineup.teamName}</div>
+            <div class="lineup-meta">
+              ${lineup.formation ? '⬛ ' + lineup.formation : ''}
+              ${lineup.coach ? ' · Coach : ' + lineup.coach : ''}
+            </div>
+            ${starters.map((p) => `
+              <div class="lineup-player">
+                <span class="pnum">${p.number ?? ''}</span>
+                <span>${p.name}</span>
+              </div>
+            `).join('')}
+            ${subs.length > 0 ? `
+              <div class="lineup-subs-label">Remplaçants</div>
+              ${subs.map((p) => `
+                <div class="lineup-player" style="color:var(--text-tertiary)">
+                  <span class="pnum">${p.number ?? ''}</span>
+                  <span>${p.name}</span>
+                </div>
+              `).join('')}
+            ` : ''}
+          </div>
+        `;
+      };
+
+      zone.innerHTML = `
+        <div class="odds-card">
+          <div class="odds-card-head"><span class="odds-card-title">Compositions officielles</span></div>
+          <div class="lineups-grid">
+            ${renderTeam(lineups[0])}
+            ${renderTeam(lineups[1])}
+          </div>
+        </div>
+      `;
+    })
+    .catch(() => {
+      zone.innerHTML = `
+        <div class="odds-card">
+          <div class="odds-card-head"><span class="odds-card-title">Compositions officielles</span></div>
+          <div class="odds-card-empty">Impossible de charger les compositions.</div>
+        </div>
+      `;
+    });
 }
 
 function renderAvgStats(a, b) {
