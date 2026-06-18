@@ -683,7 +683,7 @@
         <div class="score-display" id="score-display">0.0 – 0.0</div>
         <div class="team-block right" id="team-b-block"></div>
       </div>
-      <div class="score-label">Buts attendus — modèle de Poisson</div>
+      <div class="score-label">Buts attendus — Poisson + Dixon-Coles · FIFA · Forme · xG</div>
 
       <div class="prob-section">
         <div class="prob-labels">
@@ -796,15 +796,57 @@ const FIXTURES = [];
 
 const AVG_GOALS = 1.35;
 const FIFA_REF = 1700;
+const RHO = -0.13; // Coefficient de correction Dixon-Coles (réduit le biais sur 0-0 et 1-1)
 
-function strengthFromFifa(team) {
-  let base = (team.fifa / FIFA_REF) + team.absence;
-  if (team.xgDiff !== null) {
-    // Le différentiel xG d'un seul match est un signal volatil : on le pondère
-    // modérément (15% de poids) pour affiner sans écraser le classement FIFA.
-    base += (team.xgDiff / 10) * 0.15;
+/**
+ * Calcule le lambda (buts attendus) d'une équipe contre un adversaire.
+ *
+ * Modèle combiné :
+ *  - Classement FIFA (20-30%) : force de base, utile pour équipes sans données
+ *  - Forme récente (50-70%)  : moyenne buts marqués/concédés, source principale
+ *  - xG diff Mondial (30%)   : signal de qualité de jeu quand disponible
+ *  - Défense adverse         : buts concédés en forme récente de l'adversaire
+ *  - Absences                : malus si joueur clé manquant
+ */
+function computeLambda(team, opponent) {
+  const rf = team.recentForm;
+  const rfOpp = opponent.recentForm;
+
+  // Attaque normalisée par AVG_GOALS → ~1.0 pour une équipe moyenne
+  const formGf = rf && rf.matches > 0 ? (rf.gf / rf.matches) / AVG_GOALS : 1.0;
+  const fifaAtt = team.fifa / FIFA_REF;
+
+  let attack;
+  if (team.xgDiff !== null && team.xgDiff !== undefined) {
+    const xgNorm = 1.0 + (team.xgDiff / 10) * 0.30;
+    attack = fifaAtt * 0.20 + formGf * 0.50 + xgNorm * 0.30;
+  } else {
+    // Sans xG, on redistribue son poids sur FIFA et forme
+    attack = fifaAtt * 0.30 + formGf * 0.70;
   }
-  return { attack: base, defense: 1 / base };
+
+  // Malus absence
+  attack += team.absence || 0;
+
+  // Défense adverse : buts concédés élevés = défense faible = lambda plus haut
+  const formGaOpp = rfOpp && rfOpp.matches > 0 ? (rfOpp.ga / rfOpp.matches) / AVG_GOALS : 1.0;
+  const fifaDefOpp = FIFA_REF / opponent.fifa; // inversé : FIFA faible → défense faible
+
+  const defenseOpp = fifaDefOpp * 0.30 + formGaOpp * 0.70;
+
+  return Math.max(attack * defenseOpp * AVG_GOALS, 0.3);
+}
+
+/**
+ * Facteur de correction Dixon-Coles pour les scores faibles.
+ * Corrige la sur-représentation des 0-0, 1-0, 0-1, 1-1 dans Poisson pur.
+ */
+function dixonColes(i, j, mu, lam) {
+  if (i === 0 && j === 0) return 1 - mu * lam * RHO;
+  if (i === 0 && j === 1) return 1 + mu * RHO;
+  if (i === 1 && j === 0) return 1 + lam * RHO;
+  if (i === 1 && j === 1) return 1 - RHO;
+  return 1.0;
 }
 
 function poisson(k, lambda) {
@@ -1064,21 +1106,19 @@ function render() {
   document.getElementById('team-a-block').innerHTML = teamBlockHTML(a);
   document.getElementById('team-b-block').innerHTML = teamBlockHTML(b, true);
 
-  const sa = strengthFromFifa(a);
-  const sb = strengthFromFifa(b);
-
-  const lambdaA = sa.attack * sb.defense * AVG_GOALS;
-  const lambdaB = sb.attack * sa.defense * AVG_GOALS;
+  const lambdaA = computeLambda(a, b);
+  const lambdaB = computeLambda(b, a);
 
   document.getElementById('score-display').textContent = lambdaA.toFixed(1) + ' – ' + lambdaB.toFixed(1);
 
-  const maxGoals = 6;
+  const maxGoals = 7;
   let aWin = 0, draw = 0, bWin = 0;
   const allScores = [];
 
   for (let h = 0; h <= maxGoals; h++) {
     for (let aw = 0; aw <= maxGoals; aw++) {
-      const p = poisson(h, lambdaA) * poisson(aw, lambdaB);
+      // Application de la correction Dixon-Coles sur les scores faibles
+      const p = poisson(h, lambdaA) * poisson(aw, lambdaB) * dixonColes(h, aw, lambdaA, lambdaB);
       if (h > aw) aWin += p;
       else if (h === aw) draw += p;
       else bWin += p;
