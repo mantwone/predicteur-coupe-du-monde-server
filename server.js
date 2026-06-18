@@ -306,6 +306,15 @@ app.get("/api/results", async (req, res) => {
 // Endpoint de diagnostic : montre la réponse brute de l'API-Football, sans
 // aucun filtrage, pour comprendre pourquoi /api/fixtures pourrait être vide
 // (quota dépassé, accès à la saison restreint sur le plan gratuit, etc.)
+app.get("/api/clear-cache", (req, res) => {
+  cache = { data: null, fetchedAt: 0 };
+  resultsCache = { data: null, fetchedAt: 0 };
+  predictionsCache.clear();
+  statsCache.clear();
+  avgStatsCache.clear();
+  res.json({ cleared: true, message: "Tous les caches ont été vidés." });
+});
+
 app.get("/api/debug", async (req, res) => {
   try {
     const raw = await apiFootballGet("/fixtures", {
