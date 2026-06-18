@@ -1325,7 +1325,9 @@ function renderApiPrediction() {
 
 function renderOdds(a, b, aPct, drawPct, bPct) {
   const zone = document.getElementById('odds-zone');
-  if (!activeFixtureOdds) {
+
+  // Si aucun match sélectionné dans la liste, message d'invitation
+  if (!activeFixtureId && !activeFixtureOdds) {
     zone.innerHTML = `
       <div class="odds-card">
         <div class="odds-card-head"><span class="odds-card-title">Cote vs modèle</span></div>
@@ -1334,14 +1336,60 @@ function renderOdds(a, b, aPct, drawPct, bPct) {
     `;
     return;
   }
-  const o = activeFixtureOdds;
-  const diffA = aPct - o.a;
-  const diffDraw = drawPct - o.draw;
-  const diffB = bPct - o.b;
 
+  // Si on a des cotes manuelles (anciens matchs codés en dur), on les utilise
+  if (activeFixtureOdds) {
+    _displayOdds(zone, a, b, aPct, drawPct, bPct, activeFixtureOdds, null);
+    return;
+  }
+
+  // Sinon on charge les cotes depuis l'API pour ce fixtureId
   zone.innerHTML = `
     <div class="odds-card">
       <div class="odds-card-head"><span class="odds-card-title">Cote vs modèle</span></div>
+      <div class="odds-card-empty">Chargement des cotes...</div>
+    </div>
+  `;
+
+  if (!SERVER_URL) return;
+
+  fetch(SERVER_URL + '/api/odds/' + activeFixtureId)
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.odds) {
+        zone.innerHTML = `
+          <div class="odds-card">
+            <div class="odds-card-head"><span class="odds-card-title">Cote vs modèle</span></div>
+            <div class="odds-card-empty">Pas de cotes disponibles pour ce match pour le moment.</div>
+          </div>
+        `;
+        return;
+      }
+      _displayOdds(zone, a, b, aPct, drawPct, bPct, {
+        a: data.odds.pct.home,
+        draw: data.odds.pct.draw,
+        b: data.odds.pct.away,
+      }, data.odds.bookmaker);
+    })
+    .catch(() => {
+      zone.innerHTML = `
+        <div class="odds-card">
+          <div class="odds-card-head"><span class="odds-card-title">Cote vs modèle</span></div>
+          <div class="odds-card-empty">Impossible de charger les cotes pour ce match.</div>
+        </div>
+      `;
+    });
+}
+
+function _displayOdds(zone, a, b, aPct, drawPct, bPct, o, bookmakerName) {
+  const diffA = aPct - o.a;
+  const diffDraw = drawPct - o.draw;
+  const diffB = bPct - o.b;
+  const label = bookmakerName ? `Cote vs modèle <span style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono)">(${bookmakerName})</span>` : 'Cote vs modèle';
+
+  zone.innerHTML = `
+    <div class="odds-card">
+      <div class="odds-card-head"><span class="odds-card-title">${label}</span></div>
       <div class="odds-legend"><span>Issue</span><span>Modèle</span><span>Marché</span><span>Écart</span></div>
       <div class="odds-row">
         <span class="odds-outcome">${a.name}</span>
