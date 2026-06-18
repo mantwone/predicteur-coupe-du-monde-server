@@ -317,6 +317,35 @@ app.get("/api/debug", async (req, res) => {
   }
 });
 
+app.get("/api/debug2", async (req, res) => {
+  try {
+    const [upcomingResp, liveResp] = await Promise.all([
+      apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, next: 100 }),
+      apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, status: "1H-HT-2H-ET" }),
+    ]);
+    res.json({
+      upcoming_results: upcomingResp.results,
+      upcoming_errors: upcomingResp.errors,
+      upcoming_first3: (upcomingResp.response || []).slice(0, 3).map(f => ({
+        id: f.fixture.id,
+        date: f.fixture.date,
+        status: f.fixture.status?.short,
+        home: f.teams.home.name,
+        away: f.teams.away.name,
+      })),
+      live_results: liveResp.results,
+      live_first3: (liveResp.response || []).slice(0, 3).map(f => ({
+        id: f.fixture.id,
+        status: f.fixture.status?.short,
+        home: f.teams.home.name,
+        away: f.teams.away.name,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/healthz", (req, res) => res.send("ok"));
 
 app.listen(PORT, () => {
