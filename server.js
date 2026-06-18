@@ -167,6 +167,67 @@ app.get("/api/predictions/:fixtureId", async (req, res) => {
   }
 });
 
+// ---- Cache pour les cotes par fixture ----
+const oddsCache = new Map();
+
+/**
+ * Récupère les cotes des bookmakers pour un match précis.
+ * On extrait les cotes 1X2 (victoire domicile / nul / victoire extérieur)
+ * du bookmaker Unibet (id 6) ou à défaut du premier bookmaker disponible,
+ * et on les convertit en probabilités implicites pour les comparer au modèle.
+ */
+app.get("/api/odds/:fixtureId", async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const now = Date.now();
+    const cached = oddsCache.get(fixtureId);
+    if (cached && now - cached.fetchedAt < CACHE_DURATION_MS) {
+      return res.json({ cached: true, odds: cached.data });
+    }
+
+    const raw = await apiFootballGet("/odds", { fixture: fixtureId });
+    const bookmakers = raw.response?.[0]?.bookmakers || [];
+
+    // On cherche Unibet (id 6) en priorité, sinon on prend le premier dispo
+    const bookie = bookmakers.find((b) => b.id === 6) || bookmakers[0] || null;
+    let odds = null;
+
+    if (bookie) {
+      const market = bookie.bets?.find((b) => b.name === "Match Winner");
+      if (market) {
+        const home = parseFloat(market.values?.find((v) => v.value === "Home")?.odd || 0);
+        const draw = parseFloat(market.values?.find((v) => v.value === "Draw")?.odd || 0);
+        const away = parseFloat(market.values?.find((v) => v.value === "Away")?.odd || 0);
+
+        if (home && draw && away) {
+          // Conversion cote décimale → probabilité implicite, avec normalisation
+          // pour retirer la marge du bookmaker (overround).
+          const rawHome = 1 / home;
+          const rawDraw = 1 / draw;
+          const rawAway = 1 / away;
+          const total = rawHome + rawDraw + rawAway;
+
+          odds = {
+            bookmaker: bookie.name,
+            raw: { home, draw, away },
+            pct: {
+              home: Math.round((rawHome / total) * 1000) / 10,
+              draw: Math.round((rawDraw / total) * 1000) / 10,
+              away: Math.round((rawAway / total) * 1000) / 10,
+            },
+          };
+        }
+      }
+    }
+
+    oddsCache.set(fixtureId, { data: odds, fetchedAt: now });
+    res.json({ cached: false, odds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de récupérer les cotes pour ce match." });
+  }
+});
+
 // ---- Cache pour les statistiques détaillées par fixture ----
 const statsCache = new Map();
 
