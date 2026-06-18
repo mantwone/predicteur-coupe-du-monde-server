@@ -61,6 +61,9 @@ async function fetchUpcomingFixtures() {
       const homeId = f.teams.home.id;
       const awayId = f.teams.away.id;
 
+      // Stats simples : on récupère le classement FIFA via une recherche du
+      // nom d'équipe n'est pas disponible nativement dans API-Football, donc
+      // ici on remonte uniquement les infos déjà fournies par le fixture lui-même.
       return {
         fixtureId: f.fixture.id,
         date: f.fixture.date,
@@ -100,6 +103,22 @@ app.get("/api/fixtures", async (req, res) => {
 });
 
 // Endpoint de santé, utile pour les services qui "réveillent" le serveur
+// Endpoint de diagnostic : montre la réponse brute de l'API-Football, sans
+// aucun filtrage, pour comprendre pourquoi /api/fixtures pourrait être vide
+// (quota dépassé, accès à la saison restreint sur le plan gratuit, etc.)
+app.get("/api/debug", async (req, res) => {
+  try {
+    const raw = await apiFootballGet("/fixtures", {
+      league: LEAGUE_ID,
+      season: SEASON,
+      next: 5,
+    });
+    res.json(raw);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/healthz", (req, res) => res.send("ok"));
 
 app.listen(PORT, () => {
