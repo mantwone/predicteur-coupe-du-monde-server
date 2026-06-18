@@ -86,6 +86,57 @@ async function fetchUpcomingFixtures() {
   return enriched;
 }
 
+/**
+ * Récupère les matchs déjà joués de la Coupe du Monde 2026, avec le score
+ * final. Une seule requête couvre tout le tournoi (filtrée par statut "FT" =
+ * Full Time, donc terminé), pas besoin d'un appel par match.
+ */
+async function fetchFinishedFixtures() {
+  const fixturesResp = await apiFootballGet("/fixtures", {
+    league: LEAGUE_ID,
+    season: SEASON,
+    status: "FT",
+  });
+
+  const fixtures = fixturesResp.response || [];
+
+  return fixtures.map((f) => ({
+    fixtureId: f.fixture.id,
+    date: f.fixture.date,
+    round: f.league.round,
+    home: { id: f.teams.home.id, name: f.teams.home.name },
+    away: { id: f.teams.away.id, name: f.teams.away.name },
+    goals: { home: f.goals.home, away: f.goals.away },
+  }));
+}
+
+// ---- Cache pour les prédictions par fixture (clé = fixtureId) ----
+const predictionsCache = new Map();
+
+/**
+ * Récupère le pronostic propre de l'API pour un match précis : vainqueur
+ * prédit, probabilités, comparaison de force d'attaque/défense, et historique
+ * des confrontations directes (head-to-head) entre les deux équipes.
+ */
+app.get("/api/predictions/:fixtureId", async (req, res) => {
+  const { fixtureId } = req.params;
+  try {
+    const now = Date.now();
+    const cached = predictionsCache.get(fixtureId);
+    if (cached && now - cached.fetchedAt < CACHE_DURATION_MS) {
+      return res.json({ cached: true, prediction: cached.data });
+    }
+
+    const raw = await apiFootballGet("/predictions", { fixture: fixtureId });
+    const prediction = raw.response?.[0] || null;
+    predictionsCache.set(fixtureId, { data: prediction, fetchedAt: now });
+    res.json({ cached: false, prediction });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de récupérer le pronostic pour ce match." });
+  }
+});
+
 app.get("/api/fixtures", async (req, res) => {
   try {
     const now = Date.now();
@@ -99,6 +150,25 @@ app.get("/api/fixtures", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Impossible de récupérer les matchs pour le moment." });
+  }
+});
+
+// ---- Cache séparé pour les résultats déjà joués ----
+let resultsCache = { data: null, fetchedAt: 0 };
+
+app.get("/api/results", async (req, res) => {
+  try {
+    const now = Date.now();
+    if (resultsCache.data && now - resultsCache.fetchedAt < CACHE_DURATION_MS) {
+      return res.json({ cached: true, results: resultsCache.data });
+    }
+
+    const results = await fetchFinishedFixtures();
+    resultsCache = { data: results, fetchedAt: now };
+    res.json({ cached: false, results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Impossible de récupérer les résultats pour le moment." });
   }
 });
 
