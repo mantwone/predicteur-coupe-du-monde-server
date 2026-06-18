@@ -841,7 +841,9 @@ function computeLambda(team, opponent, statsTeam, statsOpp) {
   const attNorm = (rawAttack / AVG_GOALS) * (team.fifa / FIFA_REF);
   const defNorm = (rawDefOpp / AVG_GOALS) * (FIFA_REF / opponent.fifa);
 
-  return Math.max(attNorm * defNorm * AVG_GOALS, 0.3);
+  const result = Math.max(attNorm * defNorm * AVG_GOALS, 0.3);
+  console.log(`[λ] ${team.name} vs ${opponent.name}: rawAtt=${rawAttack?.toFixed(3)} rawDef=${rawDefOpp?.toFixed(3)} attNorm=${attNorm?.toFixed(3)} defNorm=${defNorm?.toFixed(3)} fifa=${team.fifa} → λ=${result.toFixed(3)}`);
+  return result;
 }
 
 /**
