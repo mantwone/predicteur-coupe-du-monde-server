@@ -74,17 +74,7 @@ async function fetchUpcomingFixtures() {
     return true;
   });
 
-  const now = Date.now();
-
   const enriched = fixtures
-    .filter((f) => {
-      const status = f.fixture.status?.short;
-      const isLive = ['1H', 'HT', '2H', 'ET'].includes(status);
-      // Pour les matchs en cours, on ne filtre pas par date (leur date est
-      // dans le passé par définition). Pour les matchs à venir, on vérifie
-      // quand même que la date est dans le futur (garde-fou).
-      return isLive || new Date(f.fixture.date).getTime() > now;
-    })
     .map((f) => {
       const homeId = f.teams.home.id;
       const awayId = f.teams.away.id;
