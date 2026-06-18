@@ -823,34 +823,35 @@ function computeLambda(team, opponent, statsTeam, statsOpp) {
   // ---- Attaque de l'équipe ----
   let attack;
   if (statsTeam && statsTeam.shotsOnGoal !== null) {
-    // Proxy xG via tirs cadrés : moyenne sur 5 matchs API / ratio standard
     attack = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
   } else if (team.xgDiff !== null && team.xgDiff !== undefined) {
-    // xG diff J1 Mondial : on l'utilise comme ajustement de la forme récente
     const formGf = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
     attack = formGf * (1.0 + (team.xgDiff / 10) * 0.25);
   } else {
-    // Fallback : buts marqués en forme récente
     attack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
   }
 
-  // ---- Défense adverse (buts/tirs cadrés concédés) ----
+  // ---- Défense adverse ----
   let defenseOpp;
   if (statsOpp && statsOpp.shotsOnGoal !== null) {
-    // Tirs cadrés concédés : on inverse par rapport à la moyenne
-    // (plus de tirs cadrés concédés = défense plus poreuse)
-    const avgShotsAllowed = 3.5; // moyenne internationale
-    defenseOpp = statsOpp.shotsOnGoal / avgShotsAllowed;
+    defenseOpp = statsOpp.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
   } else {
     defenseOpp = rfOpp && rfOpp.matches > 0
-      ? (rfOpp.ga / rfOpp.matches) / AVG_GOALS
-      : 1.0;
+      ? rfOpp.ga / rfOpp.matches
+      : AVG_GOALS;
   }
 
-  // Facteur défense adverse normalisé (1.0 = défense moyenne)
-  let base = attack * defenseOpp;
+  // Facteur défense adverse normalisé
+  let base = attack * (defenseOpp / AVG_GOALS);
 
-  // Malus absence (multiplicatif, ex: -0.10 → ×0.90)
+  // Coefficient de niveau relatif FIFA (racine carrée du ratio).
+  // Évite les résultats aberrants quand la forme récente vient de matchs
+  // contre des adversaires de niveau très différent (ex. Haïti en amicaux
+  // caribéens vs Brésil en qualifs CONMEBOL).
+  const fifaRatio = Math.sqrt(team.fifa / opponent.fifa);
+  base *= fifaRatio;
+
+  // Malus absence (multiplicatif)
   base *= 1.0 + (team.absence || 0);
 
   return Math.max(base, 0.3);
