@@ -55,18 +55,36 @@ async function apiFootballGet(path, params) {
  * même si l'API a un léger délai à passer un match en "en cours".
  */
 async function fetchUpcomingFixtures() {
-  const fixturesResp = await apiFootballGet("/fixtures", {
-    league: LEAGUE_ID,
-    season: SEASON,
-    next: 100,
-    status: "NS",
+  // Deux appels séparés car l'API ne supporte pas "next" avec des statuts
+  // multiples : un pour les matchs à venir (NS = Not Started), un pour les
+  // matchs en cours (1H, HT, 2H, ET). On fusionne les résultats.
+  const [upcomingResp, liveResp] = await Promise.all([
+    apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, next: 100, status: "NS" }),
+    apiFootballGet("/fixtures", { league: LEAGUE_ID, season: SEASON, status: "1H-HT-2H-ET" }),
+  ]);
+
+  const upcoming = upcomingResp.response || [];
+  const live = liveResp.response || [];
+
+  // Dédoublonnage par fixtureId au cas où un match apparaîtrait dans les deux
+  const seen = new Set();
+  const fixtures = [...live, ...upcoming].filter((f) => {
+    if (seen.has(f.fixture.id)) return false;
+    seen.add(f.fixture.id);
+    return true;
   });
 
-  const fixtures = fixturesResp.response || [];
   const now = Date.now();
 
   const enriched = fixtures
-    .filter((f) => new Date(f.fixture.date).getTime() > now) // garde-fou supplémentaire
+    .filter((f) => {
+      const status = f.fixture.status?.short;
+      const isLive = ['1H', 'HT', '2H', 'ET'].includes(status);
+      // Pour les matchs en cours, on ne filtre pas par date (leur date est
+      // dans le passé par définition). Pour les matchs à venir, on vérifie
+      // quand même que la date est dans le futur (garde-fou).
+      return isLive || new Date(f.fixture.date).getTime() > now;
+    })
     .map((f) => {
       const homeId = f.teams.home.id;
       const awayId = f.teams.away.id;
