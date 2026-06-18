@@ -677,7 +677,7 @@
       </div>
     </div>
 
-    <div class="scoreboard">
+    <div class="scoreboard" id="scoreboard">
       <div class="scoreboard-top">
         <div class="team-block" id="team-a-block"></div>
         <div class="score-display" id="score-display">0.0 – 0.0</div>
@@ -1010,6 +1010,10 @@ let activeFixtureOdds = null;
 let activeFixtureId = null;
 let activeApiHomeId = null;
 let activeApiAwayId = null;
+let matchSelected = false; // devient true dès qu'un match ou une équipe est choisi
+
+// Masquer le scoreboard au démarrage jusqu'à ce qu'un match soit sélectionné
+document.getElementById('scoreboard').style.display = 'none';
 
 fixtureSel.addEventListener('change', () => {
   if (fixtureSel.value === '') {
@@ -1025,6 +1029,7 @@ fixtureSel.addEventListener('change', () => {
   activeFixtureId = f.fixtureId || null;
   activeApiHomeId = f.apiHomeId || null;
   activeApiAwayId = f.apiAwayId || null;
+  matchSelected = true;
   render();
 });
 
@@ -1047,6 +1052,10 @@ function teamBlockHTML(team) {
 }
 
 function render() {
+  if (!matchSelected) return;
+
+  document.getElementById('scoreboard').style.display = '';
+
   const a = TEAMS[teamASel.value];
   const b = TEAMS[teamBSel.value];
 
@@ -1573,8 +1582,8 @@ function _displayOdds(zone, a, b, aPct, drawPct, bPct, o, bookmakerName) {
   `;
 }
 
-teamASel.addEventListener('change', () => { fixtureSel.value=''; activeFixtureOdds = null; render(); });
-teamBSel.addEventListener('change', () => { fixtureSel.value=''; activeFixtureOdds = null; render(); });
+teamASel.addEventListener('change', () => { fixtureSel.value=''; activeFixtureOdds = null; activeFixtureId = null; activeApiHomeId = null; activeApiAwayId = null; matchSelected = true; render(); });
+teamBSel.addEventListener('change', () => { fixtureSel.value=''; activeFixtureOdds = null; activeFixtureId = null; activeApiHomeId = null; activeApiAwayId = null; matchSelected = true; render(); });
 render();
 
 // ---- Groupes ----
