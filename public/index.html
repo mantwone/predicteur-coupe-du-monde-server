@@ -709,7 +709,7 @@
     <div id="lineups-zone"></div>
 
     <p class="disclaimer">Classement FIFA et matchs à venir chargés en direct via API-Football. Forme récente mise à jour manuellement. Modèle statistique de Poisson — pas un flux temps réel complet. Phase de groupes : pas d'avantage domicile/extérieur appliqué, sauf pour les trois pays hôtes. La comparaison cote vs modèle est fournie à titre informatif, ce n'est pas un conseil de pari.</p>
-    <p class="disclaimer" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;">Build : modele-v7-ratio30</p>
+    <p class="disclaimer" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;">Build : modele-v8-rho0</p>
 
   </section>
 
@@ -796,7 +796,11 @@ const TEAMS = {
 const FIXTURES = [];
 
 const AVG_GOALS = 1.35;
-const RHO = -0.13;
+// RHO=0 désactive la correction Dixon-Coles : avec un RHO négatif standard,
+// elle boostait artificiellement 0-0/1-0/0-1/1-1, ce qui faisait ressortir
+// le 1-1 même quand le lambda indiquait clairement un score plus élevé.
+// Poisson pur donne des résultats plus alignés avec les lambdas calculés.
+const RHO = 0;
 const SHOTS_ON_TARGET_PER_GOAL = 3.0;
 // Poids de l'effet défensif adverse sur le lambda. 1.0 = effet plein,
 // 0.2 = très atténué. Une défense "solide" contre des adversaires faibles
