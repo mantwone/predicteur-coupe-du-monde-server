@@ -795,52 +795,43 @@ const TEAMS = {
 const FIXTURES = [];
 
 const AVG_GOALS = 1.35;
-const FIFA_REF = 1700;
 const RHO = -0.13;
 const SHOTS_ON_TARGET_PER_GOAL = 3.5;
 
 /**
  * Calcule le lambda (buts attendus) d'une équipe contre un adversaire.
  *
- * Modèle attaque/défense séparés, chacun pondéré par le FIFA :
+ * Modèle simple, basé sur les buts marqués/concédés en priorité :
  *
- *   att_norm = (buts_marqués/AVG ou tirs_cadrés/3.5) × (fifa_équipe / FIFA_REF)
- *   def_norm = (buts_concédés_adv/AVG) × (FIFA_REF / fifa_adversaire)
- *   lambda   = att_norm × def_norm × AVG_GOALS
+ *   attaque        = tirs cadrés/match (API, proxy xG) si disponible,
+ *                    sinon buts marqués/match en forme récente
+ *   défense_adv    = buts concédés/match de l'adversaire en forme récente
+ *   lambda         = attaque × (défense_adv / moyenne_buts_tournoi)
  *
- * Le FIFA intervient deux fois : bonus sur l'attaque de l'équipe forte,
- * et malus sur la défense de l'équipe faible. Ça évite qu'Haïti soit
- * créditée d'une bonne défense parce qu'elle a peu concédé contre des
- * équipes caribéennes, face au Brésil.
+ * Pas de classement FIFA dans le calcul : uniquement des données de jeu
+ * réel (tirs, buts marqués, buts concédés).
  */
 function computeLambda(team, opponent, statsTeam, statsOpp) {
   const rf = team.recentForm;
   const rfOpp = opponent.recentForm;
 
-  // Attaque brute (tirs cadrés API > xG diff Mondial > buts récents)
-  let rawAttack;
+  // Attaque : tirs cadrés API (proxy xG) en priorité, sinon buts marqués
+  let attack;
   if (statsTeam && statsTeam.shotsOnGoal !== null) {
-    rawAttack = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
-  } else if (team.xgDiff !== null && team.xgDiff !== undefined) {
-    const gf = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
-    rawAttack = gf * (1.0 + (team.xgDiff / 10) * 0.25);
+    attack = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
   } else {
-    rawAttack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
-  }
-  rawAttack *= 1.0 + (team.absence || 0);
-
-  // Défense brute de l'adversaire
-  let rawDefOpp;
-  if (statsOpp && statsOpp.shotsOnGoal !== null) {
-    rawDefOpp = statsOpp.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
-  } else {
-    rawDefOpp = rfOpp && rfOpp.matches > 0 ? rfOpp.ga / rfOpp.matches : AVG_GOALS;
+    attack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
   }
 
-  const attNorm = (rawAttack / AVG_GOALS) * (team.fifa / FIFA_REF);
-  const defNorm = (rawDefOpp / AVG_GOALS) * (FIFA_REF / opponent.fifa);
+  // Défense adverse : buts concédés par match en forme récente
+  const defenseOpp = rfOpp && rfOpp.matches > 0 ? rfOpp.ga / rfOpp.matches : AVG_GOALS;
 
-  return Math.max(attNorm * defNorm * AVG_GOALS, 0.3);
+  let lambda = attack * (defenseOpp / AVG_GOALS);
+
+  // Malus absence (léger, multiplicatif)
+  lambda *= 1.0 + (team.absence || 0);
+
+  return Math.max(lambda, 0.3);
 }
 
 /**
@@ -1149,10 +1140,8 @@ function render() {
   const lambdaA = computeLambda(a, b, activeStatsHome, activeStatsAway);
   const lambdaB = computeLambda(b, a, activeStatsAway, activeStatsHome);
 
-  const scoreA = Math.round(lambdaA);
-  const scoreB = Math.round(lambdaB);
-  document.getElementById('score-display').textContent = scoreA + ' – ' + scoreB;
-  document.getElementById('score-label').textContent = `Score attendu · λ ${lambdaA.toFixed(1)}–${lambdaB.toFixed(1)} · Poisson + Dixon-Coles`;
+  document.getElementById('score-display').textContent = lambdaA.toFixed(1) + ' – ' + lambdaB.toFixed(1);
+  document.getElementById('score-label').textContent = 'Buts attendus — modèle basé sur la forme récente';
 
   const maxGoals = 7;
   let aWin = 0, draw = 0, bWin = 0;
