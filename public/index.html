@@ -709,7 +709,7 @@
     <div id="lineups-zone"></div>
 
     <p class="disclaimer">Classement FIFA et matchs à venir chargés en direct via API-Football. Forme récente mise à jour manuellement. Modèle statistique de Poisson — pas un flux temps réel complet. Phase de groupes : pas d'avantage domicile/extérieur appliqué, sauf pour les trois pays hôtes. La comparaison cote vs modèle est fournie à titre informatif, ce n'est pas un conseil de pari.</p>
-    <p class="disclaimer" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;">Build : modele-v8-rho0</p>
+    <p class="disclaimer" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;">Build : modele-v9-tiebreak</p>
 
   </section>
 
@@ -1174,6 +1174,25 @@ function render() {
   }
 
   allScores.sort((x, y) => y.p - x.p);
+
+  // Si les meilleurs scores sont à moins de 1 point de pourcentage d'écart
+  // (quasi ex-aequo statistique), on privilégie celui le plus proche des
+  // lambdas arrondis pour un affichage plus intuitif, sans changer les
+  // pourcentages affichés qui restent les vraies probabilités Poisson.
+  const topP = allScores[0].p;
+  const nearTop = allScores.filter((s) => topP - s.p < 0.01);
+  if (nearTop.length > 1) {
+    nearTop.sort((x, y) => {
+      const distX = Math.abs(x.h - lambdaA) + Math.abs(x.a - lambdaB);
+      const distY = Math.abs(y.h - lambdaA) + Math.abs(y.a - lambdaB);
+      return distX - distY;
+    });
+    // On remonte le score le plus cohérent en première position
+    const best = nearTop[0];
+    allScores.splice(allScores.indexOf(best), 1);
+    allScores.unshift(best);
+  }
+
   const top3 = allScores.slice(0, 3);
 
   const aPct = Math.round(aWin * 1000) / 10;
