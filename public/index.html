@@ -709,7 +709,7 @@
     <div id="lineups-zone"></div>
 
     <p class="disclaimer">Classement FIFA et matchs à venir chargés en direct via API-Football. Forme récente mise à jour manuellement. Modèle statistique de Poisson — pas un flux temps réel complet. Phase de groupes : pas d'avantage domicile/extérieur appliqué, sauf pour les trois pays hôtes. La comparaison cote vs modèle est fournie à titre informatif, ce n'est pas un conseil de pari.</p>
-    <p class="disclaimer" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;">Build : modele-v9-tiebreak</p>
+    <p class="disclaimer" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;">Build : modele-v10-blend</p>
 
   </section>
 
@@ -813,12 +813,17 @@ const DEFENSE_WEIGHT = 0.2;
  *
  * Modèle simple, basé sur les buts marqués/concédés en priorité :
  *
- *   attaque        = tirs cadrés/match (API, proxy xG) si disponible,
- *                    sinon buts marqués/match en forme récente
- *   défense_adv    = buts concédés/match de l'adversaire en forme récente,
- *                    son effet est atténué (DEFENSE_WEIGHT) pour ne pas
- *                    écraser une attaque clairement supérieure
- *   lambda         = attaque × défense_adv_atténuée
+ *   attaque  = moyenne entre buts marqués/match réels ET proxy tirs cadrés,
+ *              quand les stats API sont disponibles. Combiner les deux
+ *              signaux évite qu'un seul domine : les tirs cadrés seuls
+ *              ignorent les attaques à forte conversion (ex: Argentine avec
+ *              Messi, peu de tirs mais très efficace), et les buts seuls
+ *              peuvent être gonflés par un match exceptionnel isolé.
+ *              Sans stats API, on utilise uniquement les buts réels.
+ *   défense_adv = buts concédés/match de l'adversaire, effet atténué
+ *                 (DEFENSE_WEIGHT) pour ne pas écraser une attaque
+ *                 clairement supérieure
+ *   lambda      = attaque × défense_adv_atténuée
  *
  * Pas de classement FIFA dans le calcul : uniquement des données de jeu
  * réel (tirs, buts marqués, buts concédés).
@@ -827,12 +832,15 @@ function computeLambda(team, opponent, statsTeam, statsOpp) {
   const rf = team.recentForm;
   const rfOpp = opponent.recentForm;
 
-  // Attaque : tirs cadrés API (proxy xG) en priorité, sinon buts marqués
+  const formGf = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
+
+  // Attaque : moyenne entre buts réels et proxy tirs cadrés si disponible
   let attack;
   if (statsTeam && statsTeam.shotsOnGoal !== null) {
-    attack = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
+    const proxyXg = statsTeam.shotsOnGoal / SHOTS_ON_TARGET_PER_GOAL;
+    attack = (formGf + proxyXg) / 2;
   } else {
-    attack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
+    attack = formGf;
   }
 
   // Défense adverse : buts concédés par match en forme récente, ramenée
