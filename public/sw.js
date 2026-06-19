@@ -3,7 +3,7 @@
 // version utilisable même sans connexion (les données en direct ne se
 // chargeront pas hors-ligne, mais l'app elle-même s'ouvrira normalement).
 
-const CACHE_NAME = "predicteur-cdm-v1";
+const CACHE_NAME = "predicteur-cdm-v2";
 const PRECACHE_ASSETS = [
   "/",
   "/manifest.json",
