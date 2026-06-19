@@ -840,13 +840,7 @@ function computeLambda(team, opponent, statsTeam, statsOpp) {
   const attNorm = (rawAttack / AVG_GOALS) * (team.fifa / FIFA_REF);
   const defNorm = (rawDefOpp / AVG_GOALS) * (FIFA_REF / opponent.fifa);
 
-  const result = Math.max(attNorm * defNorm * AVG_GOALS, 0.3);
-
-  // Debug temporaire : stocker les valeurs pour affichage
-  if (!window._debugLambda) window._debugLambda = [];
-  window._debugLambda.push(`${team.name}: rawAtt=${rawAttack?.toFixed(2)} rawDef=${rawDefOpp?.toFixed(2)} att=${attNorm?.toFixed(2)} def=${defNorm?.toFixed(2)} fifa=${team.fifa} → λ=${result.toFixed(2)}`);
-
-  return result;
+  return Math.max(attNorm * defNorm * AVG_GOALS, 0.3);
 }
 
 /**
@@ -1158,11 +1152,7 @@ function render() {
   const scoreA = Math.round(lambdaA);
   const scoreB = Math.round(lambdaB);
   document.getElementById('score-display').textContent = scoreA + ' – ' + scoreB;
-
-  // Debug : afficher les valeurs intermédiaires
-  const dbg = (window._debugLambda || []).join(' | ');
-  window._debugLambda = [];
-  document.getElementById('score-label').textContent = dbg || `λ ${lambdaA.toFixed(2)}–${lambdaB.toFixed(2)}`;
+  document.getElementById('score-label').textContent = `Score attendu · λ ${lambdaA.toFixed(1)}–${lambdaB.toFixed(1)} · Poisson + Dixon-Coles`;
 
   const maxGoals = 7;
   let aWin = 0, draw = 0, bWin = 0;
