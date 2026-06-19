@@ -984,7 +984,7 @@ async function loadLiveFixtures() {
       const timeLabel = new Date(f.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
       const opt = document.createElement('option');
       opt.value = 'live-' + f.fixtureId;
-      opt.textContent = '🔴 ' + dateLabel + ' ' + timeLabel + ' — ' + f.home.name + ' vs ' + f.away.name;
+      opt.textContent = '🔴 ' + dateLabel + ' — ' + f.home.name + ' vs ' + f.away.name + ' (' + timeLabel + ')';
       fixtureSel.appendChild(opt);
 
       FIXTURES.push({ label: opt.textContent, a: homeKey, b: awayKey, odds: null, fixtureId: f.fixtureId, apiHomeId: f.home.id, apiAwayId: f.away.id });
