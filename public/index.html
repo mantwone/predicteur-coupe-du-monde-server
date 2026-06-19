@@ -797,6 +797,11 @@ const FIXTURES = [];
 const AVG_GOALS = 1.35;
 const RHO = -0.13;
 const SHOTS_ON_TARGET_PER_GOAL = 3.5;
+// Poids de l'effet défensif adverse sur le lambda. 1.0 = effet plein,
+// 0.2 = très atténué. Une défense "solide" contre des adversaires faibles
+// ne doit pas trop réduire l'attaque d'une équipe nettement supérieure ;
+// l'attaque brute de l'équipe reste le signal dominant.
+const DEFENSE_WEIGHT = 0.2;
 
 /**
  * Calcule le lambda (buts attendus) d'une équipe contre un adversaire.
@@ -805,8 +810,10 @@ const SHOTS_ON_TARGET_PER_GOAL = 3.5;
  *
  *   attaque        = tirs cadrés/match (API, proxy xG) si disponible,
  *                    sinon buts marqués/match en forme récente
- *   défense_adv    = buts concédés/match de l'adversaire en forme récente
- *   lambda         = attaque × (défense_adv / moyenne_buts_tournoi)
+ *   défense_adv    = buts concédés/match de l'adversaire en forme récente,
+ *                    son effet est atténué (DEFENSE_WEIGHT) pour ne pas
+ *                    écraser une attaque clairement supérieure
+ *   lambda         = attaque × défense_adv_atténuée
  *
  * Pas de classement FIFA dans le calcul : uniquement des données de jeu
  * réel (tirs, buts marqués, buts concédés).
@@ -823,10 +830,13 @@ function computeLambda(team, opponent, statsTeam, statsOpp) {
     attack = rf && rf.matches > 0 ? rf.gf / rf.matches : AVG_GOALS;
   }
 
-  // Défense adverse : buts concédés par match en forme récente
-  const defenseOpp = rfOpp && rfOpp.matches > 0 ? rfOpp.ga / rfOpp.matches : AVG_GOALS;
+  // Défense adverse : buts concédés par match en forme récente, ramenée
+  // à un ratio vs moyenne du tournoi, puis atténuée pour limiter son effet
+  const defenseOppRaw = rfOpp && rfOpp.matches > 0 ? rfOpp.ga / rfOpp.matches : AVG_GOALS;
+  const defenseRatio = defenseOppRaw / AVG_GOALS;
+  const defenseRatioAttenuated = 1.0 + (defenseRatio - 1.0) * DEFENSE_WEIGHT;
 
-  let lambda = attack * (defenseOpp / AVG_GOALS);
+  let lambda = attack * defenseRatioAttenuated;
 
   // Malus absence (léger, multiplicatif)
   lambda *= 1.0 + (team.absence || 0);
